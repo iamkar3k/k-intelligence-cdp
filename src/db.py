@@ -53,15 +53,14 @@ def read_query(sql: str) -> pd.DataFrame:
 
 
 def table_exists(table_name: str) -> bool:
+    """Check if table exists by directly querying it."""
     try:
         engine = get_engine()
         with engine.connect() as conn:
-            result = conn.execute(text(
-                f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}')"
-            ))
-            exists = result.scalar()
+            result = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+            count = result.scalar()
         engine.dispose()
-        return bool(exists)
+        return int(count) >= 0
     except Exception:
         return False
 
