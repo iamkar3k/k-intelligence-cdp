@@ -115,7 +115,6 @@ if page == "Data Ingestion":
         try:
             count = get_row_count("intelligence")
             ready = count > 0
-            st.info(f"Debug — intelligence row count: {count}")
         except Exception as e:
             ready = False
             st.error(f"Debug — get_row_count failed: {e}")
