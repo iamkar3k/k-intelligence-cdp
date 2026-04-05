@@ -1,13 +1,13 @@
 import os
 import pandas as pd
+import requests
 
 
 def _get_creds():
-    """Get Supabase credentials from Streamlit secrets or .env."""
     try:
         import streamlit as st
-        url  = st.secrets.get("SUPABASE_URL", None)
-        key  = st.secrets.get("SUPABASE_SERVICE_KEY", None) or st.secrets.get("SUPABASE_KEY", None)
+        url = st.secrets.get("SUPABASE_URL", None)
+        key = st.secrets.get("SUPABASE_SERVICE_KEY", None) or st.secrets.get("SUPABASE_KEY", None)
         db_url = st.secrets.get("SUPABASE_DB_URL", None)
         if url and key:
             return url, key, db_url
@@ -33,7 +33,6 @@ def get_client():
 
 
 def upload_dataframe(df: pd.DataFrame, table_name: str, if_exists: str = "replace"):
-    """Upload via SQLAlchemy — only used locally."""
     from sqlalchemy import create_engine
     _, _, db_url = _get_creds()
     engine = create_engine(db_url)
@@ -42,43 +41,58 @@ def upload_dataframe(df: pd.DataFrame, table_name: str, if_exists: str = "replac
 
 
 def read_table(table_name: str) -> pd.DataFrame:
-    """Read full table using SQLAlchemy — fastest for large tables."""
-    from sqlalchemy import create_engine
-    _, _, db_url = _get_creds()
+    """Read full table via Supabase REST API with pagination."""
+    url, key, db_url = _get_creds()
+
+    # Try SQLAlchemy first (fastest for large tables)
     if db_url:
         try:
+            from sqlalchemy import create_engine
             engine = create_engine(db_url)
             df = pd.read_sql(f'SELECT * FROM "{table_name}"', engine)
             engine.dispose()
-            return df
+            if not df.empty:
+                return df
         except Exception:
             pass
-    # Fallback to Supabase client with pagination
-    client = get_client()
+
+    # Fallback: Supabase REST API with pagination
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "count=exact",
+    }
+
     all_rows = []
     page_size = 1000
     offset = 0
+
     while True:
-        response = (
-            client.table(table_name)
-            .select("*")
-            .range(offset, offset + page_size - 1)
-            .execute()
+        range_header = f"{offset}-{offset + page_size - 1}"
+        resp = requests.get(
+            f"{url}/rest/v1/{table_name}",
+            headers={**headers, "Range": range_header, "Range-Unit": "items"},
+            params={"select": "*"},
+            timeout=30,
         )
-        rows = response.data
+        if resp.status_code not in [200, 206]:
+            break
+        rows = resp.json()
         if not rows:
             break
         all_rows.extend(rows)
         if len(rows) < page_size:
             break
         offset += page_size
+
     return pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
 
 
 def table_exists(table_name: str) -> bool:
     try:
         client = get_client()
-        response = client.table(table_name).select("*", count="exact").limit(1).execute()
+        client.table(table_name).select("*", count="exact").limit(1).execute()
         return True
     except Exception:
         return False
