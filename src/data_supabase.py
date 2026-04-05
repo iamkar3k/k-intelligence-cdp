@@ -1,12 +1,8 @@
-"""
-Supabase-backed data access layer — replaces SQLite for hosted app.
-"""
 import pandas as pd
-from src.db import read_table, read_query, table_exists, get_row_count
+from src.db import read_table, table_exists, get_row_count
 
 
 def db_ready() -> bool:
-    """Check if intelligence table exists and has data."""
     return table_exists("intelligence") and get_row_count("intelligence") > 0
 
 
@@ -23,20 +19,22 @@ def load_monthly_ltv() -> pd.DataFrame:
 
 def load_category_maps() -> tuple:
     try:
-        cat = read_table("category_map").set_index("ACTUAL")["MASKED"].to_dict()
+        cat = read_table("category_map")
+        cat_dict = dict(zip(cat["ACTUAL"], cat["MASKED"])) if not cat.empty else {}
     except Exception:
-        cat = {}
+        cat_dict = {}
     try:
-        sub = read_table("subcategory_map").set_index("ACTUAL")["MASKED"].to_dict()
+        sub = read_table("subcategory_map")
+        sub_dict = dict(zip(sub["ACTUAL"], sub["MASKED"])) if not sub.empty else {}
     except Exception:
-        sub = {}
-    return cat, sub
+        sub_dict = {}
+    return cat_dict, sub_dict
 
 
 def load_category_ltv() -> dict:
     try:
         df = read_table("category_ltv")
-        return df.set_index("CATEGORY_MASKED")["PRICE_PAID"].to_dict()
+        return dict(zip(df["CATEGORY_MASKED"], df["PRICE_PAID"])) if not df.empty else {}
     except Exception:
         return {}
 
@@ -44,8 +42,10 @@ def load_category_ltv() -> dict:
 def load_subcategory_ltv() -> dict:
     try:
         df = read_table("subcategory_ltv")
+        if df.empty:
+            return {}
         df = df.nlargest(10, "PRICE_PAID")
-        return df.set_index("SUBCATEGORY_MASKED")["PRICE_PAID"].to_dict()
+        return dict(zip(df["SUBCATEGORY_MASKED"], df["PRICE_PAID"]))
     except Exception:
         return {}
 
@@ -94,12 +94,10 @@ def get_summary_stats(intel: pd.DataFrame) -> dict:
 
 
 def save_segment(segment_name: str, filters: dict, guids: pd.Series):
-    from src.db import upload_dataframe
-    import sqlite3, os
+    from src.db import get_client
     from datetime import datetime
-    seg_df = pd.DataFrame({
-        "SEGMENT_NAME": segment_name,
-        "GUID": guids,
-        "CREATED_AT": datetime.now().isoformat(),
-    })
-    upload_dataframe(seg_df, "saved_segments", if_exists="append")
+    client = get_client()
+    rows = [{"SEGMENT_NAME": segment_name, "GUID": g, "CREATED_AT": datetime.now().isoformat()} for g in guids]
+    # Insert in batches of 500
+    for i in range(0, len(rows), 500):
+        client.table("saved_segments").insert(rows[i:i+500]).execute()
