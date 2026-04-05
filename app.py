@@ -102,9 +102,22 @@ if page == "Data Ingestion":
     st.markdown('<div class="section-header">Database Status</div>', unsafe_allow_html=True)
 
     with st.spinner("Checking Supabase connection..."):
-        ready = db_ready()
+        try:
+            from src.db import get_engine, get_row_count, table_exists
+            engine = get_engine()
+            engine.dispose()
+            conn_ok = True
+            conn_err = None
+        except Exception as e:
+            conn_ok = False
+            conn_err = str(e)
 
-    if ready:
+    if conn_ok:
+        ready = table_exists("intelligence") and get_row_count("intelligence") > 0
+    else:
+        ready = False
+
+    if conn_ok and ready:
         st.markdown('<span class="status-badge badge-success">● Supabase Connected — Data Ready</span>', unsafe_allow_html=True)
         st.markdown("---")
 
@@ -132,18 +145,13 @@ if page == "Data Ingestion":
                 <div class="metric-label">SMS Opted-In</div>
                 <div class="metric-value">{int(st.session_state.intel["SMS_OPTIN"].sum()):,}</div>
             </div>""", unsafe_allow_html=True)
+    elif conn_ok and not ready:
+        st.markdown('<span class="status-badge badge-warning">⚠ Connected but no data found</span>', unsafe_allow_html=True)
+        st.error("Tables not found in Supabase. Run upload_data.py locally first.")
     else:
-        st.markdown('<span class="status-badge badge-warning">⚠ Supabase not connected or no data found</span>', unsafe_allow_html=True)
-        st.markdown("---")
-        st.markdown("""
-        **To initialize the database, run this one-time script locally:**
-        ```bash
-        conda activate segmentapp
-        python3 src/upload_data.py
-        ```
-        This will process your CSVs and upload all data to Supabase.
-        Once done, come back here and click **Load Intelligence Layer**.
-        """)
+        st.markdown('<span class="status-badge badge-warning">⚠ Supabase connection failed</span>', unsafe_allow_html=True)
+        st.error(f"Connection error: {conn_err}")
+        st.markdown("**Check your SUPABASE_DB_URL in Streamlit secrets.**")
 
 
 # PAGE 2 — AUDIENCE INSIGHTS
