@@ -53,8 +53,12 @@ def read_table(table_name: str) -> pd.DataFrame:
             engine.dispose()
             if not df.empty:
                 return df
-        except Exception:
-            pass
+        except Exception as sql_err:
+            try:
+                import streamlit as st
+                st.warning(f"SQLAlchemy failed for {table_name}: {sql_err}")
+            except Exception:
+                pass
 
     # Fallback: Supabase REST API with pagination
     headers = {
