@@ -1,10 +1,20 @@
 import os
-from groq import Groq
-from dotenv import load_dotenv
 
-load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+def _get_groq_key():
+    try:
+        import streamlit as st
+        key = st.secrets.get("GROQ_API_KEY", None)
+        if key:
+            return key
+    except Exception:
+        pass
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+    return os.environ.get("GROQ_API_KEY")
 
 
 def generate_campaign_copy(
@@ -14,6 +24,8 @@ def generate_campaign_copy(
     keywords: str = "",
     product_links: list = None,
 ) -> dict:
+    from groq import Groq
+    client = Groq(api_key=_get_groq_key())
 
     rfm_tiers   = segment_stats.get("rfm_dist", {})
     top_cats    = segment_stats.get("top_categories", {})
@@ -21,7 +33,6 @@ def generate_campaign_copy(
     total       = segment_stats.get("total_customers", 0)
     avg_ltv     = segment_stats.get("avg_ltv", 0)
 
-    # Build product links block
     links_block = ""
     if product_links:
         valid = [l.strip() for l in product_links if l.strip()]
@@ -30,7 +41,6 @@ def generate_campaign_copy(
             for i, link in enumerate(valid, 1):
                 links_block += f"  Product {i}: {link}\n"
 
-    # Build keywords block
     keywords_block = ""
     if keywords and keywords.strip():
         keywords_block = f"\nAdditional keywords and tone guidance: {keywords.strip()}"
@@ -49,16 +59,16 @@ Top Categories: {top_cats}{keywords_block}{links_block}
 
 Instructions:
 - Use the keywords naturally to shape tone and messaging
-- If product links are provided, embed them as clickable anchor text in the body (e.g. <a href="URL">Shop Now</a>)
-- Keep the email warm, personal and action-oriented
+- If product links provided, embed as clickable anchor text in body
+- Keep email warm, personal and action-oriented
 - Subject line max 60 characters
 - Preview text max 90 characters
 - Body: 3-4 short paragraphs
 
-Respond ONLY in this exact format with no extra text or markdown:
+Respond ONLY in this exact format with no extra text:
 SUBJECT: [subject line]
 PREVIEW: [preview text]
-BODY: [email body with HTML links if product links provided]
+BODY: [email body]
 CTA: [button text, max 5 words]"""
 
     response = client.chat.completions.create(

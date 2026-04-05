@@ -1,21 +1,32 @@
 import os
 import pandas as pd
 from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
 
-load_dotenv()
 
 def _get_db_url():
-    """Get DB URL from env or Streamlit secrets."""
+    """Get DB URL from Streamlit secrets (cloud) or .env (local)."""
+    # Try Streamlit secrets first (cloud deployment)
     try:
         import streamlit as st
-        return st.secrets.get("SUPABASE_DB_URL", os.getenv("SUPABASE_DB_URL"))
+        url = st.secrets.get("SUPABASE_DB_URL", None)
+        if url:
+            return url
     except Exception:
-        return os.getenv("SUPABASE_DB_URL")
+        pass
+    # Fall back to .env for local development
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+    return os.environ.get("SUPABASE_DB_URL")
 
 
 def get_engine():
-    return create_engine(_get_db_url())
+    url = _get_db_url()
+    if not url:
+        raise ValueError("SUPABASE_DB_URL not found in secrets or environment.")
+    return create_engine(url)
 
 
 def upload_dataframe(df: pd.DataFrame, table_name: str, if_exists: str = "replace"):
