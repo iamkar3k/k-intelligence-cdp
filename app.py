@@ -103,9 +103,8 @@ if page == "Data Ingestion":
 
     with st.spinner("Checking Supabase connection..."):
         try:
-            from src.db import get_engine, get_row_count, table_exists
-            engine = get_engine()
-            engine.dispose()
+            from src.db import get_client, get_row_count, table_exists
+            client = get_client()
             conn_ok = True
             conn_err = None
         except Exception as e:
