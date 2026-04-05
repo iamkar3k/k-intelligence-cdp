@@ -113,7 +113,13 @@ if page == "Data Ingestion":
             conn_err = str(e)
 
     if conn_ok:
-        ready = table_exists("intelligence") and get_row_count("intelligence") > 0
+        try:
+            count = get_row_count("intelligence")
+            ready = count > 0
+            st.info(f"Debug — intelligence row count: {count}")
+        except Exception as e:
+            ready = False
+            st.error(f"Debug — get_row_count failed: {e}")
     else:
         ready = False
 
